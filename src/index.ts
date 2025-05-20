@@ -24,8 +24,11 @@ import type {
   PackageIndex,
   PackageManifest,
   PackageResource,
-  DownloadPackageOptions
+  DownloadPackageOptions,
+  InstallPackageOptions
 } from './types';
+
+temp.track();
 
 /**
  * default logger uses global console methods
@@ -273,16 +276,20 @@ export class FhirPackageInstaller {
     return tarballPath;
   }
 
-  private async downloadAndExtractTarball(packageObject: PackageIdentifier): Promise<string> {
+  /**
+   * Extracts a tarball to a temporary directory and generates a new `.fpi.index.json` file.
+   * The tarball can be a file path or a stream.
+   * @param src The source tarball, either a file path or a Readable stream.
+   * @returns The path to the temporary directory where the package was extracted.
+   */
+  private async extractTarball(src: string | Readable): Promise<string> {
+    const tarballStream: Readable = typeof src === 'string' ? fs.createReadStream(src) : src;
+    
     const indexEntries: FileInPackageIndex[] = [];
     const handleEntryPromises: Promise<void>[] = [];
-  
-    const tarballUrl = await this.getTarballUrl(packageObject);
-    this.logger.info(`Downloading ${packageObject.id}@${packageObject.version} from ${tarballUrl}`);
-    const tarballStream = await this.fetchStream(tarballUrl);
+
     const tempDirectory = temp.mkdirSync();
-    temp.track();
-    this.logger.info(`Extracting ${packageObject.id}@${packageObject.version} to ${tempDirectory}`);
+    this.logger.info(`Extracting package to ${tempDirectory}`);
     const extract = tar.extract();
   
     extract.on('entry', (header, stream, next) => {
@@ -343,17 +350,36 @@ export class FhirPackageInstaller {
     };
     await fs.writeJSON(path.join(tempDirectory, 'package', '.fpi.index.json'), indexJson);
   
-    this.logger.info(`Extracted ${packageObject.id}@${packageObject.version} to a temporary directory`);
+    this.logger.info('Extracted to a temporary directory');
     return tempDirectory;
   }
 
-  private async cachePackageTarball(packageObject: PackageIdentifier, tempDirectory: string): Promise<string> {
-    const finalPath = await this.getPackageDirPath(packageObject);
+  private async downloadAndExtractTarball(packageObject: PackageIdentifier): Promise<string> {
+    const tarballUrl = await this.getTarballUrl(packageObject);
+    this.logger.info(`Downloading ${packageObject.id}@${packageObject.version} from ${tarballUrl}`);
+    const tarballStream = await this.fetchStream(tarballUrl);
+    return await this.extractTarball(tarballStream);
+  }
+
+  /**
+   * Caches the package in the FHIR package cache directory.
+   * If the package is already installed, it will not be reinstalled.
+   * @param packageObject The package identifier object
+   * @param src The source path of the package to be cached
+   * @param move Whether to move the package to the cache or copy it. Defaults to **true**.
+   * @returns The path to the cached package directory
+   */
+  private async cachePackage(packageObject: PackageIdentifier, src: string, move: boolean = true): Promise<string> {
+    let finalPath = await this.getPackageDirPath(packageObject);
+    if (!await fs.exists(path.join(src, 'package'))) {
+      finalPath = path.join(finalPath, 'package');
+    }
     const isInstalled = await this.isInstalled(packageObject);
     if (!isInstalled) {
       // try to move the temp dir to the cache, this will fail if pkg was already installed by a parallel process
       try {
-        await fs.move(tempDirectory, finalPath, { overwrite: false });
+        const action = move ? fs.move : fs.copy;
+        await action(src, finalPath, { overwrite: false });
         this.logger.info(`Installed ${packageObject.id}@${packageObject.version} in the FHIR package cache: ${finalPath}`);
       }
       catch {
@@ -437,13 +463,17 @@ export class FhirPackageInstaller {
     }
   }
 
+  private async readManifestFile(packageFolder: string): Promise<PackageManifest> {
+    const manifestPath = path.join(packageFolder, 'package.json');
+    return await fs.readJSON(manifestPath, { encoding: 'utf8' });
+  }
+
   public async getManifest(packageId: string | PackageIdentifier): Promise<PackageManifest> {
     try {
       if (typeof packageId === 'string') {
         packageId = await this.toPackageObject(packageId);
       }
-      const manifestPath = path.join(await this.getPackageDirPath(packageId), 'package', 'package.json');
-      const manifestFile = await fs.readJSON(manifestPath, { encoding: 'utf8' });
+      const manifestFile = await this.readManifestFile(path.join(await this.getPackageDirPath(packageId), 'package'));
       if (manifestFile) {
         return manifestFile;
       } else {
@@ -498,27 +528,93 @@ export class FhirPackageInstaller {
       if (!alreadyInstalled) {
         try {
           const tempPath = await this.downloadAndExtractTarball(packageObject);
-          await this.cachePackageTarball(packageObject, tempPath);
+          await this.cachePackage(packageObject, tempPath);
         } catch (e) {
           this.logger.error(`Failed to install package ${packageObject.id}@${packageObject.version}`);
           throw this.prethrow(e);
         }
       }
   
-      await this.getPackageIndexFile(packageObject);
-      const deps = await this.getDependencies(packageObject);
-      for (const dep in deps) {
-        if (this.skipExamples && dep.includes('examples')) {
-          this.logger.info(`Skipping example package ${dep}@${deps[dep]}`);
-          continue;
-        } else {
-          await this.install(`${dep}@${deps[dep]}`);
-        }
-      }
+      await this.installPackageDependencies(packageObject);
       return true;
     } catch (e) {
       throw this.prethrow(e);
     }
+  }
+
+  private async installPackageDependencies(packageObject: PackageIdentifier): Promise<void>{
+    await this.getPackageIndexFile(packageObject);
+    const deps = await this.getDependencies(packageObject);
+    for (const dep in deps) {
+      if (this.skipExamples && dep.includes('examples')) {
+        this.logger.info(`Skipping example package ${dep}@${deps[dep]}`);
+        continue;
+      } else {
+        await this.install(`${dep}@${deps[dep]}`);
+      }
+    }
+  }
+
+  /**
+   * Installs a package from a local file or directory.
+   * The package can be a tarball file or a directory containing the package files.
+   * @param src The path to the local package file or directory.
+   * @param options Options for installing the package.
+   * @returns A promise that resolves to true if the package was installed successfully,
+   * or false if it was already installed.
+   */
+  public async installLocalPackage(src: string, options?: InstallPackageOptions): Promise<boolean> {
+    try {
+      src = src.trim();
+      if (src.length === 0) {
+        throw new Error('Invalid path: empty string');
+      }
+      if (!await fs.exists(src)) {
+        throw new Error(`Invalid path: ${src} does not exist`);
+      }
+
+      const fullPath = path.isAbsolute(src) ? src : path.resolve(src);
+      const isDirectory = (await fs.lstat(fullPath)).isDirectory();
+      let finalPath: string;
+
+      if (isDirectory) {
+        this.logger.info(`Installing package from directory: ${fullPath}`);
+        finalPath = fullPath;
+      } else {
+        this.logger.info(`Installing package from file: ${fullPath}`);
+        finalPath = await this.extractTarball(fullPath);
+      }
+    
+      let packageObject: PackageIdentifier;
+      if (options?.packageId) {
+        packageObject = await this.toPackageObject(options.packageId);
+      } else {
+        const potentialPackagePath = path.join(finalPath, 'package');
+        const manifestFilePath = await fs.exists(potentialPackagePath) ? potentialPackagePath : finalPath;
+        const manifest = await this.readManifestFile(manifestFilePath);
+        packageObject = { id: manifest.name, version: manifest.version };
+      }
+        
+      const alreadyInstalled = await this.isInstalled(packageObject);
+      if (alreadyInstalled && !options?.override) {
+        this.logger.info(`Package ${packageObject.id}@${packageObject.version} is already installed`);
+        return false;
+      } else {
+        await fs.remove(await this.getPackageDirPath(packageObject));
+      }
+
+      const installedPath = await this.cachePackage(packageObject, finalPath, !isDirectory); // if the source is a file, we can move the temp dir to the cache
+      await this.generatePackageIndex(packageObject);
+      this.logger.info(`Installed ${packageObject.id}@${packageObject.version} in the FHIR package cache: ${installedPath}`);
+    
+      if (options?.installDependencies) {
+        await this.installPackageDependencies(packageObject);
+      }
+    } catch (e) {
+      throw this.prethrow(e);
+    }
+
+    return true;
   }
 
   /**
@@ -587,5 +683,7 @@ export type {
   PackageIndex,
   PackageManifest,
   FileInPackageIndex,
-  PackageResource
+  PackageResource,
+  DownloadPackageOptions,
+  InstallPackageOptions
 } from './types';

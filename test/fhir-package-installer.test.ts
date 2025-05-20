@@ -19,9 +19,16 @@ function sortIndexEntries(entries: FileInPackageIndex[]): FileInPackageIndex[] {
 
 temp.track();
 
+// Whether to skip specific tests (e.g., heavy package-related tests)
+// to speed up the test suite execution
+const skip = false;
+
+const TIMEOUT = 240000; // 240 seconds timeout for installation
+
 describe('fhir-package-installer module', () => {
   const fakePackage = { id: 'fake-package', version: '1.0.0' };
   const testPkg = { id: 'hl7.fhir.uv.sdc', version: '3.0.0' };
+  const fshGeneratedPkg = { id: 'fsh.test.pkg', version: '0.1.0' };
   const tstPkgHash = `${testPkg.id}#${testPkg.version}`;
   const tstPkgAt = `${testPkg.id}@${testPkg.version}`;
   
@@ -36,11 +43,12 @@ describe('fhir-package-installer module', () => {
 
   const downloadedPackagesPath = path.join('.', 'test', 'downloaded-packages');
   const resolvedDownloadedPackagesPath = path.resolve(downloadedPackagesPath);
+  const fshGeneratedPath = path.join(path.resolve('.'), 'test', 'fsh-generated');
 
   beforeAll(async () => {
     // cleanup before running tests
     await fs.remove(customCachePath);
-    await fs.remove(downloadedPackagesPath);
+    await fs.remove(resolvedDownloadedPackagesPath);
   });
 
   it('should return correct fake package directory path (default cache)', async () => {
@@ -77,15 +85,17 @@ describe('fhir-package-installer module', () => {
     const result = await customCacheFpi.install(testPkg);
     expect(result).toBe(true);
     expect(await customCacheFpi.isInstalled(testPkg)).toBe(true);
-  }, 240000); // 240 seconds timeout for installation
+  }, TIMEOUT);
 
-  it('should install the heavy package successfully', async () => {
-    const result = await customCacheFpi.install(heavyPackage);
-    expect(result).toBe(true);
-    expect(await customCacheFpi.isInstalled(heavyPackage)).toBe(true);
-  }, 240000); // 240 seconds timeout for installation
+  it('should install the heavy package successfully',
+    { timeout: TIMEOUT, skip },
+    async () => {
+      const result = await customCacheFpi.install(heavyPackage);
+      expect(result).toBe(true);
+      expect(await customCacheFpi.isInstalled(heavyPackage)).toBe(true);
+    });
 
-  it('should get a valid package index file after install', async () => {
+  it('should get a valid package index file after install', { skip }, async () => {
     const index = await customCacheFpi.getPackageIndexFile(tstPkgAt);
     expect(index).toMatchObject({
       'index-version': 2,
@@ -96,7 +106,7 @@ describe('fhir-package-installer module', () => {
     });
   });
 
-  it('should get a valid manifest file after install', async () => {
+  it('should get a valid manifest file after install', { skip }, async () => {
     const manifest = await customCacheFpi.getManifest(tstPkgHash);
     expect(manifest.name).toBe(testPkg.id);
     const manifest2 = await customCacheFpi.getManifest(heavyPackage);
@@ -108,7 +118,7 @@ describe('fhir-package-installer module', () => {
     expect(obj).toEqual({ id: 'pkg.name', version: '1.0.0' });
   });
 
-  it('should get valid dependencies from the test package', async () => {
+  it('should get valid dependencies from the test package', { skip }, async () => {
     const deps = await customCacheFpi.getDependencies(testPkg);
     expect(deps).toMatchObject({
       'hl7.fhir.r4.core': '4.0.1',
@@ -159,7 +169,7 @@ describe('fhir-package-installer module', () => {
   });
 
   // us.nlm.vsac#0.11.0.json
-  it('should get correct index for us.nlm.vsac package', async () => {
+  it('should get correct index for us.nlm.vsac package', { skip }, async () => {
     const generatedIndex = await customCacheFpi.getPackageIndexFile({ id: 'us.nlm.vsac', version: '0.11.0' });
     const referenceIndex = fs.readJSONSync(path.join(path.resolve('.'), 'test', 'us.nlm.vsac#0.11.0.json'));
 
@@ -192,7 +202,7 @@ describe('fhir-package-installer module', () => {
     expect(sortedGenerated).toEqual(sortedReference);
   });
 
-  it('should have correct content in the resources', () => {
+  it('should have correct content in the resources', { skip }, () => {
     const filename = 'ValueSet-1.3.6.1.4.1.6997.4.1.2.234.999.4.2.json';
     const referenceVs = fs.readJSONSync(path.join(path.resolve('.'), 'test', filename));
     const installedVs = fs.readJSONSync(path.join(customCachePath, 'us.nlm.vsac#0.11.0', 'package', filename));
@@ -257,5 +267,80 @@ describe('fhir-package-installer module', () => {
       const action = fpi.downloadPackage(testPkg, { destination: customPath, extract: true, overwrite: true });
       await expect(action).resolves.toBeDefined();
     });
-  });  
+  }); // end of downloadPackage tests
+
+  describe('install local package', () => {
+    beforeAll(async () => {
+      await fs.remove(customCachePath);
+    });
+
+    it('should failed when src is empty', async () => {
+      const action = customCacheFpi.installLocalPackage('');
+      await expect(action).rejects.toThrow('Invalid path');
+    });
+
+    it('should failed when src does not exist', async () => {
+      const fakePath = path.join(path.resolve('.'), 'test', 'fake-path');
+      const action = customCacheFpi.installLocalPackage(fakePath);
+      await  expect(action).rejects.toThrow('Invalid path');
+    });
+
+    it('should failed when src folder does not contain package/package.json', async () => {
+      // arrange: temporary rename package.json to package.json.del
+      const originalJsonPath = path.join(fshGeneratedPath, 'package.json');
+      const newJsonPath = path.join(path.dirname(originalJsonPath), 'package.json.del');
+      await fs.rename(originalJsonPath, newJsonPath);
+      // act
+      const action = customCacheFpi.installLocalPackage(fshGeneratedPath);
+      // assert
+      await expect(action).rejects.toThrow();
+      // cleanup: rename back to package.json
+      await fs.rename(newJsonPath, originalJsonPath);
+    });
+
+    it('should failed when src tgz file fails to extract', async () => {
+      const fakeTgzPath = path.join(fshGeneratedPath, 'fake.tgz');
+      await fs.writeFile(fakeTgzPath, 'fake content');
+      const action = customCacheFpi.installLocalPackage(fakeTgzPath);
+      await expect(action).rejects.toThrow();
+      await fs.remove(fakeTgzPath);
+    });
+
+    it('should successfully install from local folder', async () => {
+      await expect(customCacheFpi.installLocalPackage(fshGeneratedPath)).resolves.toBe(true);
+      await expect(customCacheFpi.isInstalled(fshGeneratedPkg)).resolves.toBe(true);
+      const pkgPath = await customCacheFpi.getPackageDirPath(fshGeneratedPkg);
+      const indexPath = path.join(pkgPath, 'package', '.fpi.index.json');
+      const indexExists = await fs.exists(indexPath);
+      expect(indexExists).toBe(true);
+    }, TIMEOUT);
+
+    it('should return false when package is already installed', async () => {
+      const action = customCacheFpi.installLocalPackage(fshGeneratedPath);
+      await expect(action).resolves.toBe(false);
+      await expect(customCacheFpi.isInstalled(fshGeneratedPkg)).resolves.toBe(true);
+    });
+
+    it('should return true when package is already installed and override=true', async () => {
+      const action = customCacheFpi.installLocalPackage(fshGeneratedPath, { override: true });
+      await expect(action).resolves.toBe(true);
+      await expect(customCacheFpi.isInstalled(fshGeneratedPkg)).resolves.toBe(true);
+    });
+
+    it('should successfully install from local folder with a custom package id', async () => {
+      await expect(customCacheFpi.installLocalPackage(fshGeneratedPath, { packageId: fakePackage })).resolves.toBe(true);
+      await expect(customCacheFpi.isInstalled(fakePackage)).resolves.toBe(true);
+    }, TIMEOUT);
+
+    it('should successfully install from local tgz file', { timeout: 1000 * 60 * 10 }, async () => {
+      const testPkgPath = await customCacheFpi.getPackageDirPath(testPkg);
+      const testPkgSrcPath = path.join(resolvedDownloadedPackagesPath, `${testPkg.id}-${testPkg.version}.tgz`);
+      const indexPath = path.join(testPkgPath, 'package', '.fpi.index.json');
+      await fs.remove(testPkgPath);
+      await expect(customCacheFpi.isInstalled(testPkg)).resolves.toBe(false);
+      await expect(customCacheFpi.installLocalPackage(testPkgSrcPath)).resolves.toBe(true);
+      await expect(customCacheFpi.isInstalled(testPkg)).resolves.toBe(true);
+      await expect(fs.exists(indexPath)).resolves.toBe(true);
+    });
+  }); // end of install local package tests
 });
