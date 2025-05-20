@@ -3,6 +3,9 @@
   "version": "1.2.1",
   "description": "A utility module for downloading, indexing, caching, and managing FHIR packages from the FHIR Package Registry and Simplifier",
   "main": "dist/index.js",
+  "bin": {
+    "fpi": "dist/cli.js"
+  },
   "types": "dist/index.d.ts",
   "type": "module",
   "author": "Outburn Ltd.",
@@ -31,7 +34,10 @@
   "scripts": {
     "clean:build": "rimraf dist",
     "build:ncc": "ncc build src/index.ts --external fs-extra --external tar-stream --external temp --no-cache --out dist",
-    "build": "npm run clean:build && npm run build:ncc",
+    "build:cli": "ncc build src/cli.ts --out dist/cli",
+    "build": "npm run clean:build && npm run build:ncc && npm run build:cli",
+    "cli": "npm run build && node dist/cli/index.js",
+    "cli:dev": "node dist/cli/index.js",
     "dist-to-module": "rimraf node_modules/fhir-package-installer && npm run build && node test/dist-to-module.js",
     "check-registries": "node test/checkRegistriesAvailable.js",
     "pretest": "npm run dist-to-module && npm run check-registries",
@@ -39,12 +45,14 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "commander": "^14.0.0",
     "fs-extra": "^11.3.0",
     "p-limit": "^6.2.0",
     "tar-stream": "^3.1.7",
     "temp": "^0.9.4"
   },
   "devDependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
     "@eslint/js": "^9.24.0",
     "@types/fs-extra": "^11.0.4",
     "@types/tar-stream": "^3.1.3",
