@@ -40,46 +40,9 @@ const defaultLogger: ILogger = {
 };
 
 /**
- * Default prethrow function does nothing since the regular throw prints to console.log, which is the default logger
- */
-const prethrow = (msg: Error | any): Error => {
-  if (msg instanceof Error) {
-    return msg;
-  }
-  const error = new Error(msg);
-  return error;
-};
-
-/**
  * Max number of concurrent file operations (read / write))
  */
 const limit = pLimit(Math.max(4, os.cpus().length));
-
-/**
- * Generates an index entry for the package resource
- * @param filename resource filename
- * @param content resource content
- * @returns FileInPackageIndex object 
- */
-const extractResourceIndexEntry = (filename: string, content: PackageResource): FileInPackageIndex => {
-  const evalAttribute = (att: any | any[]) => (typeof att === 'string' ? att : undefined);
-  const indexEntry: FileInPackageIndex = {
-    filename,
-    resourceType: content.resourceType,
-    id: content.id,
-    url: evalAttribute(content.url),
-    name: evalAttribute(content.name),
-    version: evalAttribute(content.version),
-    kind: evalAttribute(content.kind),
-    type: evalAttribute(content.type),
-    supplements: evalAttribute(content.supplements),
-    content: evalAttribute(content.content),
-    baseDefinition: evalAttribute(content.baseDefinition),
-    derivation: evalAttribute(content.derivation),
-    date: evalAttribute(content.date)
-  };
-  return indexEntry;
-};
 
 export class FhirPackageInstaller {
   private logger: ILogger = defaultLogger;
@@ -93,7 +56,7 @@ export class FhirPackageInstaller {
    */
   private cachePath: string = path.join(os.homedir(), '.fhir', 'packages');
   private skipExamples = false; // skip dependency installation of example packages
-  private prethrow: (msg: Error | any) => Error = prethrow;
+  private prethrow: (msg: Error | any) => Error;
   
   constructor(config?: FpiConfig) {
     const { logger, registryUrl, cachePath, skipExamples } = config || {} as FpiConfig;
@@ -105,16 +68,9 @@ export class FhirPackageInstaller {
     }
     if (logger) {
       this.logger = logger;
-      this.prethrow = (msg: Error | any) => {
-        if (!(msg instanceof Error)) {
-          msg = new Error(msg);
-        }
-        this.logger.error(msg.message);
-        this.logger.error(JSON.stringify(msg, null, 2));
-        return msg;
-      };
     };
     this.utils = createUtils(this.logger);
+    this.prethrow = logger ? this.utils.defaultPrethrow : this.utils.prethrowWithLogger;
     if (skipExamples) {
       this.skipExamples = skipExamples;
     }
@@ -124,6 +80,8 @@ export class FhirPackageInstaller {
     }
   }
 
+
+  // ==== Privtae methods ====
   /**
    * Takes a PackageIdentifier Object and returns the corresponding directory name of the package
    * @param packageObject A PackageObject with both name and version keys
@@ -134,18 +92,6 @@ export class FhirPackageInstaller {
     return packageId.id + '#' + packageId.version;
   }
 
-  /**
-   * Takes a PackageIdentifier Object and returns the path to the package folder in the cache
-   * @param packageObject A PackageIdentifier Object with both name and version keys
-   * @returns The full path to the package directory
-   */
-  public async getPackageDirPath(packageId: PackageIdentifier | string): Promise<string> {
-    try {
-      return path.join(this.cachePath, await this.toDirName(packageId));
-    } catch (e) {
-      throw this.prethrow(e);
-    }
-  }
 
   /**
    * Get the full path to the .fpi.index.json file in the package folder
@@ -176,7 +122,7 @@ export class FhirPackageInstaller {
           file => limit(
             async () => {
               const content = shallowParse(await fs.readFile(path.join(packagePath, 'package', file), { encoding: 'utf8' }));
-              const indexEntry = extractResourceIndexEntry(file, content as PackageResource);
+              const indexEntry = this.utils.extractResourceIndexEntry(file, content as PackageResource);
               return indexEntry;
             }
           )
@@ -262,7 +208,7 @@ export class FhirPackageInstaller {
           const contentBuffer = await fs.readFile(fullPath, 'utf8');
           try {
             const content = shallowParse(contentBuffer) as PackageResource;
-            const indexEntry = extractResourceIndexEntry(fileName, content);
+            const indexEntry = this.utils.extractResourceIndexEntry(fileName, content);
             indexEntries.push(indexEntry);
           } catch (err) {
             console.error(`Failed to parse ${fileName}:`, err);
@@ -344,6 +290,40 @@ export class FhirPackageInstaller {
     return 'latest';
   }
 
+  private async readManifestFile(packageFolder: string): Promise<PackageManifest> {
+    const manifestPath = path.join(packageFolder, 'package.json');
+    return await fs.readJSON(manifestPath, { encoding: 'utf8' });
+  }
+
+  private async installPackageDependencies(packageObject: PackageIdentifier): Promise<void>{
+    await this.getPackageIndexFile(packageObject);
+    const deps = await this.getDependencies(packageObject);
+    for (const dep in deps) {
+      if (this.skipExamples && dep.includes('examples')) {
+        this.logger.info(`Skipping example package ${dep}@${deps[dep]}`);
+        continue;
+      } else {
+        await this.install(`${dep}@${deps[dep]}`);
+      }
+    }
+  }
+
+  
+  // ==== Public methods ====
+
+  /**
+   * Takes a PackageIdentifier Object and returns the path to the package folder in the cache
+   * @param packageObject A PackageIdentifier Object with both name and version keys
+   * @returns The full path to the package directory
+   */
+  public async getPackageDirPath(packageId: PackageIdentifier | string): Promise<string> {
+    try {
+      return path.join(this.cachePath, await this.toDirName(packageId));
+    } catch (e) {
+      throw this.prethrow(e);
+    }
+  }
+
   public async isInstalled(packageId: PackageIdentifier | string): Promise<boolean> {
     try {
       return await fs.exists(await this.getPackageDirPath(packageId));      
@@ -401,11 +381,6 @@ export class FhirPackageInstaller {
     } catch (e) {
       throw this.prethrow(e);
     }
-  }
-
-  private async readManifestFile(packageFolder: string): Promise<PackageManifest> {
-    const manifestPath = path.join(packageFolder, 'package.json');
-    return await fs.readJSON(manifestPath, { encoding: 'utf8' });
   }
 
   public async getManifest(packageId: string | PackageIdentifier): Promise<PackageManifest> {
@@ -481,18 +456,6 @@ export class FhirPackageInstaller {
     }
   }
 
-  private async installPackageDependencies(packageObject: PackageIdentifier): Promise<void>{
-    await this.getPackageIndexFile(packageObject);
-    const deps = await this.getDependencies(packageObject);
-    for (const dep in deps) {
-      if (this.skipExamples && dep.includes('examples')) {
-        this.logger.info(`Skipping example package ${dep}@${deps[dep]}`);
-        continue;
-      } else {
-        await this.install(`${dep}@${deps[dep]}`);
-      }
-    }
-  }
 
   /**
    * Installs a package from a local file or directory.
