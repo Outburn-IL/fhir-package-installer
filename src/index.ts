@@ -4,17 +4,17 @@
  *   Project name: FHIR-Package-Installer
  */
 
-import https from 'https';
 import fs from 'fs-extra';
 import pLimit from 'p-limit';
 import path from 'path';
 import { Readable } from 'stream';
-import { finished, pipeline } from 'stream/promises';
+import { pipeline } from 'stream/promises';
 import * as tar from 'tar-stream';
 import * as zlib from 'zlib';
 import temp from 'temp';
 import os from 'os';
 import shallowParse from './shallowParse';
+import { createUtils } from './utils';
 
 import type {
   ILogger,
@@ -83,6 +83,7 @@ const extractResourceIndexEntry = (filename: string, content: PackageResource): 
 
 export class FhirPackageInstaller {
   private logger: ILogger = defaultLogger;
+  private utils: ReturnType<typeof createUtils>;
   private registryUrl = 'https://packages.fhir.org';
   private fallbackUrlBase = 'https://packages.simplifier.net';
   /**
@@ -113,6 +114,7 @@ export class FhirPackageInstaller {
         return msg;
       };
     };
+    this.utils = createUtils(this.logger);
     if (skipExamples) {
       this.skipExamples = skipExamples;
     }
@@ -120,33 +122,6 @@ export class FhirPackageInstaller {
       fs.mkdirSync(this.cachePath, { recursive: true });
       this.logger.info(`Directory '${this.cachePath}' created successfully.`);
     }
-  }
-
-  private async withRetries<T>(
-    fn: () => Promise<T>,
-    retries = 3,
-    delayMs = 5000
-  ): Promise<T> {
-    let lastError: any;
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        return await fn();
-      } catch (err: any) {
-        lastError = err;
-        const isTemporary =
-          err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND' || err.code === 'ECONNRESET';
-  
-        if (!isTemporary || attempt === retries) {
-          throw err;
-        }
-  
-        this.logger.warn(
-          `⚠️ Attempt ${attempt} failed (${err.code || err.message}), retrying in ${delayMs}ms...`
-        );
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-    throw lastError;
   }
 
   /**
@@ -214,41 +189,12 @@ export class FhirPackageInstaller {
       await fs.writeJSON(indexPath, indexJson);
       return indexJson;
     } catch (e) {
-      this.logger.error(e);
-      throw e;
+      throw this.prethrow(e);
     }
   }
-
-  private fetchJson(url: string): Promise<any> {
-    return this.withRetries(() => new Promise((resolve, reject) => {
-      https.get(url, (res) => {
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(new Error(`Failed to parse JSON from ${url}: ${e}`));
-          }
-        });
-      }).on('error', reject);
-    }));
-  }  
-
-  private fetchStream(url: string): Promise<Readable> {
-    return this.withRetries(() => new Promise((resolve, reject) => {
-      https.get(url, (res) => {
-        if (res.statusCode === 200) {
-          resolve(res);
-        } else {
-          reject(new Error(`Failed to fetch ${url} (status ${res.statusCode})`));
-        }
-      }).on('error', reject);
-    }));
-  }  
-
+  
   private async getPackageDataFromRegistry(packageName: string): Promise<Record<string, any>> {
-    return await this.fetchJson(`${this.registryUrl}/${packageName}/`);
+    return await this.utils.fetchJson(`${this.registryUrl}/${packageName}/`);
   }
 
   private async getTarballUrl(packageObject: PackageIdentifier): Promise<string> {
@@ -260,19 +206,13 @@ export class FhirPackageInstaller {
     }
   }
 
-  private async downloadFile(url: string, destination: string): Promise<void> {
-    const tarballStream = await this.fetchStream(url);
-    const fileStream = fs.createWriteStream(destination);
-    await finished(tarballStream.pipe(fileStream));
-  }
-
   private async downloadTarball(packageObject: PackageIdentifier): Promise<string> {
     const tempDirectory = temp.mkdirSync();
     const tarballPath = path.join(tempDirectory, `${packageObject.id}-${packageObject.version}.tgz`);
     const tarballUrl = await this.getTarballUrl(packageObject);
     
     this.logger.info(`Downloading ${packageObject.id}@${packageObject.version} from ${tarballUrl}`);
-    await this.downloadFile(tarballUrl, tarballPath);
+    await this.utils.downloadFile(tarballUrl, tarballPath);
     return tarballPath;
   }
 
@@ -357,7 +297,7 @@ export class FhirPackageInstaller {
   private async downloadAndExtractTarball(packageObject: PackageIdentifier): Promise<string> {
     const tarballUrl = await this.getTarballUrl(packageObject);
     this.logger.info(`Downloading ${packageObject.id}@${packageObject.version} from ${tarballUrl}`);
-    const tarballStream = await this.fetchStream(tarballUrl);
+    const tarballStream = await this.utils.fetchStream(tarballUrl);
     return await this.extractTarball(tarballStream);
   }
 
@@ -454,7 +394,7 @@ export class FhirPackageInstaller {
           packageVersion = await this.checkLatestPackageDist(packageName);
         } catch (e) {
           this.logger.error(`Failed to fetch latest version for package ${packageName}`);
-          throw this.prethrow(e);
+          throw e;
         }
       }
       return { id: packageName, version: packageVersion };
@@ -498,7 +438,6 @@ export class FhirPackageInstaller {
   /**
    * Get the logger instance used by this FhirPackageInstaller.
   */
-
   public getLogger(): ILogger {
     return this.logger;
   }
@@ -531,7 +470,7 @@ export class FhirPackageInstaller {
           await this.cachePackage(packageObject, tempPath);
         } catch (e) {
           this.logger.error(`Failed to install package ${packageObject.id}@${packageObject.version}`);
-          throw this.prethrow(e);
+          throw e;
         }
       }
   
@@ -661,7 +600,7 @@ export class FhirPackageInstaller {
         this.logger.info(`Downloaded ${packageName} to: ${finalPath}`);
       } catch (e) {
         this.logger.error(`Failed to download package ${packageName}`);
-        throw this.prethrow(e);
+        throw e;
       }
       return finalPath;
     }
