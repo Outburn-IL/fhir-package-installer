@@ -3,8 +3,8 @@ import { FhirPackageInstaller } from '.';
 
 // Set up the command line interface and global options
 const program = new Command()
-  .option('-r, --registry-url <url>', '')
-  .option('-c, --cache-path <path>', '')
+  .option('-r, --registry-url <url>', 'URL of the FHIR package registry')
+  .option('-c, --cache-path <path>', 'Path to the FHIR package cache directory')
   .option('-s, --skip-examples', 'Skip dependency installation of example packages');;
 
 program
