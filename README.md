@@ -72,6 +72,17 @@ Accepts either a package identifier object (`{ id, version }`) or a string (`'na
 
 ---
 
+### `downloadPackage(packageId: string | PackageIdentifier, options?: DownloadPackageOptions): Promise<string>`
+Downloads a package tarball and optionally extracts it to a destination directory.
+
+---
+
+### `installLocalPackage(src: string, options?: InstallPackageOptions): Promise<boolean>`
+Installs a package from a local file or directory.  
+The package can be a tarball file or a directory containing the package files.  
+
+---
+
 ### `getManifest(packageId: string | PackageIdentifier): Promise<PackageManifest>`
 Fetches the `package.json` manifest of an installed package.
 
