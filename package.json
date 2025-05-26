@@ -4,7 +4,7 @@
   "description": "A utility module for downloading, indexing, caching, and managing FHIR packages from the FHIR Package Registry and Simplifier",
   "main": "dist/index.js",
   "bin": {
-    "fpi": "dist/cli.js"
+    "fpi": "./cli/index.js"
   },
   "types": "dist/index.d.ts",
   "type": "module",
@@ -24,6 +24,7 @@
   ],
   "files": [
     "dist",
+    "cli",
     "README.md",
     "LICENSE"
   ],
@@ -32,12 +33,13 @@
     "url": "git+https://github.com/Outburn-IL/fhir-package-installer.git"
   },
   "scripts": {
-    "clean:build": "rimraf dist",
+    "clean:build": "rimraf dist && rimraf cli",
     "build:ncc": "ncc build src/index.ts --external fs-extra --external tar-stream --external temp --no-cache --out dist",
-    "build:cli": "ncc build src/cli.ts --out dist/cli",
+    "build:cli": "ncc build src/cli.ts   --external fs-extra --external tar-stream --external temp --no-cache --out cli",
     "build": "npm run clean:build && npm run build:ncc && npm run build:cli",
-    "cli": "npm run build && node dist/cli/index.js",
-    "cli:dev": "node dist/cli/index.js",
+    "cli": "npm run build && node cli/index.js",
+    "cli:dev": "node cli/index.js",
+    "fpi": "npm run dist-to-module && fpi",
     "dist-to-module": "rimraf node_modules/fhir-package-installer && npm run build && node test/dist-to-module.js",
     "check-registries": "node test/checkRegistriesAvailable.js",
     "pretest": "npm run dist-to-module && npm run check-registries",
