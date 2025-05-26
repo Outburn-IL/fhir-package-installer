@@ -4,7 +4,7 @@
   "description": "A utility module for downloading, indexing, caching, and managing FHIR packages from the FHIR Package Registry and Simplifier",
   "main": "dist/index.js",
   "bin": {
-    "fpi": "./cli/index.js"
+    "fpi": "cli/index.js"
   },
   "types": "dist/index.d.ts",
   "type": "module",
