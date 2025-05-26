@@ -274,18 +274,18 @@ describe('fhir-package-installer module', () => {
       await fs.remove(customCachePath);
     });
 
-    it('should failed when src is empty', async () => {
+    it('should fail when src is empty', async () => {
       const action = customCacheFpi.installLocalPackage('');
       await expect(action).rejects.toThrow('Invalid path');
     });
 
-    it('should failed when src does not exist', async () => {
+    it('should fail when src does not exist', async () => {
       const fakePath = path.join(path.resolve('.'), 'test', 'fake-path');
       const action = customCacheFpi.installLocalPackage(fakePath);
       await  expect(action).rejects.toThrow('Invalid path');
     });
 
-    it('should failed when src folder does not contain package/package.json', async () => {
+    it('should fail when src folder does not contain package/package.json', async () => {
       // arrange: temporary rename package.json to package.json.del
       const originalJsonPath = path.join(fshGeneratedPath, 'package.json');
       const newJsonPath = path.join(path.dirname(originalJsonPath), 'package.json.del');
@@ -298,7 +298,7 @@ describe('fhir-package-installer module', () => {
       await fs.rename(newJsonPath, originalJsonPath);
     });
 
-    it('should failed when src tgz file fails to extract', async () => {
+    it('should fail when src tgz file fails to extract', async () => {
       const fakeTgzPath = path.join(fshGeneratedPath, 'fake.tgz');
       await fs.writeFile(fakeTgzPath, 'fake content');
       const action = customCacheFpi.installLocalPackage(fakeTgzPath);
