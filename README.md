@@ -130,6 +130,50 @@ Returns the path to a specific package folder in the cache.
 
 ---
 
+## CLI
+
+In addition to its programmatic API, FHIR Package Installer also provides a fully featured Command Line Interface (CLI) for installing, managing, and inspecting FHIR packages directly from the terminal.
+
+This is especially useful for:
+- Tooling pipelines (e.g., CI/CD)
+- Scripted validators and snapshot generators
+- Developers who prefer using the CLI over importing the library
+
+### Usage
+
+```
+fpi [options] [command]
+```
+
+### Global Options
+
+| Option                  | Description                                      |
+| ----------------------- | ------------------------------------------------ |
+| `-r`, `--registry-url`  | URL of the FHIR package registry                 |
+| `-c`, `--cache-path`    | Path to the FHIR package cache directory         |
+| `-s`, `--skip-examples` | Skip dependency installation of example packages |
+| `-V`, `--version`       | Output the version number                        |
+| `-h`, `--help`          | Display help for command                         |
+
+### Commands
+
+| Command                              | Description                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| `install`, `i <packageId>`           | Download and install a package and all its dependencies                        |
+| `download`, `dl <packageId>`         | Download a package tarball and optionally extract it to a destination          |
+| `install-local`, `il <src>`          | Install a package from a local file or directory                               |
+| `get-manifest`, `gm <packageId>`     | Print the `package.json` manifest of an installed package                      |
+| `get-index`, `gi <packageId>`        | Print the `.fpi.index.json` content for the package. Auto-generates if missing |
+| `get-dependencies`, `gd <packageId>` | Parse and list dependencies from the `package.json`                            |
+| `to-package-object`, `tpo <id>`      | Parse `name`, `name@version`, or `name#version` into `{ id, version }`         |
+| `is-installed`, `is <packageId>`     | Check if a package exists in the local cache                                   |
+| `get-cache`, `gc`                    | Print the root cache directory path                                            |
+| `get-package-path`, `gp <id>`        | Print the path to a specific cached package                                    |
+| `help [command]`                     | Display help for a specific command                                            |
+
+
+---
+
 ## Package Cache Directory
 
 ### Location
