@@ -44,6 +44,7 @@
     "check-registries": "node test/checkRegistriesAvailable.js",
     "pretest": "npm run dist-to-module && npm run check-registries",
     "test": "vitest run",
+    "test:skip-heavy": "set SKIP_HEAVY_TESTS=true && npm run test",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
