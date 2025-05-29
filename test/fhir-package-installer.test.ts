@@ -342,5 +342,21 @@ describe('fhir-package-installer module', () => {
       await expect(customCacheFpi.isInstalled(testPkg)).resolves.toBe(true);
       await expect(fs.exists(indexPath)).resolves.toBe(true);
     });
-  }); // end of install local package tests
+
+    // end of install local package tests
+
+    it.each([
+      'hl7.fhir.us.core@6.1.0',
+      'hl7.fhir.us.davinci-pdex',
+      'hl7.fhir.us.davinci-pas@2.0.1',
+      'de.gematik.epa.medication@1.0.2-rc1'
+    ])('should install package: %s', 
+      { timeout: TIMEOUT, skip }, 
+      async (pkg) => {
+        const result = await customCacheFpi.install(pkg);
+        expect(result).toBe(true);
+        expect(await customCacheFpi.isInstalled(pkg)).toBe(true);
+      }
+    );
+  });
 });

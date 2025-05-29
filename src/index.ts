@@ -144,12 +144,17 @@ export class FhirPackageInstaller {
   }
 
   private async getTarballUrl(packageObject: PackageIdentifier): Promise<string> {
+    let url: string;
     try {
       const packageData = await this.getPackageDataFromRegistry(packageObject.id);
-      return packageData.versions[packageObject.version]?.dist?.tarball;
+      url = packageData.versions[packageObject.version]?.dist?.tarball ?? packageData.versions[packageObject.version]?.url;
     } catch {
+      throw new Error(`Package ${packageObject.id}@${packageObject.version} not found in the registry at ${this.registryUrl}.`);
+    }      
+    if (!url) {
       return `${this.fallbackUrlBase}/${packageObject.id}/-/${packageObject.id}-${packageObject.version}.tgz`;
     }
+    return url;
   }
 
   private async downloadTarball(packageObject: PackageIdentifier): Promise<string> {
@@ -419,7 +424,12 @@ export class FhirPackageInstaller {
 
   public async getDependencies(packageObject: PackageIdentifier) {
     try {
-      return (await this.getManifest(packageObject))?.dependencies;
+      const deps = (await this.getManifest(packageObject))?.dependencies;
+      // special case: some packages refer to hl7.fhir.r4.core as version 4.0.0 instead of 4.0.1
+      if (deps && deps['hl7.fhir.r4.core'] === '4.0.0') {
+        deps['hl7.fhir.r4.core'] = '4.0.1';
+      }
+      return deps || {};
     } catch (e) {
       throw this.prethrow(e);
     }    
