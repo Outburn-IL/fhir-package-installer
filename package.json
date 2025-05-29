@@ -3,6 +3,9 @@
   "version": "1.3.2",
   "description": "A utility module for downloading, indexing, caching, and managing FHIR packages from the FHIR Package Registry and Simplifier",
   "main": "dist/index.js",
+  "bin": {
+    "fpi": "cli/index.js"
+  },
   "types": "dist/index.d.ts",
   "type": "module",
   "author": "Outburn Ltd.",
@@ -21,6 +24,7 @@
   ],
   "files": [
     "dist",
+    "cli",
     "README.md",
     "LICENSE"
   ],
@@ -29,27 +33,35 @@
     "url": "git+https://github.com/Outburn-IL/fhir-package-installer.git"
   },
   "scripts": {
-    "clean:build": "rimraf dist",
+    "clean:build": "rimraf dist && rimraf cli",
     "build:ncc": "ncc build src/index.ts --external fs-extra --external tar-stream --external temp --no-cache --out dist",
-    "build": "npm run clean:build && npm run build:ncc",
+    "build:cli": "ncc build src/cli.ts   --external fs-extra --external tar-stream --external temp --no-cache --out cli",
+    "build": "npm run clean:build && npm run build:ncc && npm run build:cli",
+    "cli": "npm run build && node cli/index.js",
+    "cli:dev": "node cli/index.js",
+    "fpi": "npm run dist-to-module && fpi",
     "dist-to-module": "rimraf node_modules/fhir-package-installer && npm run build && node test/dist-to-module.js",
     "check-registries": "node test/checkRegistriesAvailable.js",
     "pretest": "npm run dist-to-module && npm run check-registries",
     "test": "vitest run",
+    "test:skip-heavy": "cross-env SKIP_HEAVY_TESTS=true npm run test",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "commander": "^14.0.0",
     "fs-extra": "^11.3.0",
     "p-limit": "^6.2.0",
     "tar-stream": "^3.1.7",
     "temp": "^0.9.4"
   },
   "devDependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
     "@eslint/js": "^9.24.0",
     "@types/fs-extra": "^11.0.4",
     "@types/tar-stream": "^3.1.3",
     "@types/temp": "^0.9.4",
     "@vercel/ncc": "^0.38.3",
+    "cross-env": "^7.0.3",
     "eslint": "^9.27.0",
     "globals": "^16.2.0",
     "rimraf": "^6.0.1",

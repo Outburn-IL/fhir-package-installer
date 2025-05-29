@@ -21,7 +21,7 @@ temp.track();
 
 // Whether to skip specific tests (e.g., heavy package-related tests)
 // to speed up the test suite execution
-const skip = false;
+const skip = process.env.SKIP_HEAVY_TESTS?.trim().toLowerCase() === 'true';
 
 const TIMEOUT = 240000; // 240 seconds timeout for installation
 
