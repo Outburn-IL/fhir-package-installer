@@ -552,9 +552,9 @@ export class FhirPackageInstaller {
       const packageObject = await this.toPackageObject(packageId);
       const packageName = `${packageObject.id}@${packageObject.version}`;
       
-      let finalPath = destination && path.isAbsolute(destination)
+      let finalPath = path.isAbsolute(destination)
         ? destination
-        : path.join(path.resolve(destination ||'.'));
+        : path.join(path.resolve(destination));
       if (extract) {
         finalPath = path.join(finalPath, await this.toDirName(packageObject));
       } else {
