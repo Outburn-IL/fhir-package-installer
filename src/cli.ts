@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
+import { Command } from '@commander-js/extra-typings';
 import { FhirPackageInstaller } from '.';
 
 // Set up the command line interface and global options
