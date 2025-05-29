@@ -70,7 +70,7 @@ export class FhirPackageInstaller {
       this.logger = logger;
     };
     this.utils = createUtils(this.logger);
-    this.prethrow = logger ? this.utils.defaultPrethrow : this.utils.prethrowWithLogger;
+    this.prethrow = logger ? this.utils.prethrowWithLogger : this.utils.defaultPrethrow;
     if (skipExamples) {
       this.skipExamples = skipExamples;
     }
