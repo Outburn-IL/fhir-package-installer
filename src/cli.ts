@@ -28,7 +28,7 @@ program
 program
   .command('download <packageId>')
   .alias('dl')
-  .description('Download a package tarball and optionally extracts it to a destination directory')
+  .description('Download a package tarball and optionally extracts it to a destination directory (defaults to the current location)')
   .option('-d, --dest <dest>', 'The directory path where the package should be saved or extracted')
   .option('-o, --overwrite', 'Whether to overwrite the existing package if it already exists')
   .option('-e, --extract', 'Whether to extract the package after downloading')
@@ -42,9 +42,9 @@ program
   .alias('il')
   .description('Install a package from a local file or directory')
   .argument('<src>', 'The path to a tarball file or a directory containing the package files')
-  .option('-i, --id <packageId>', '')
-  .option('-o, --override', '')
-  .option('-d, --install-dependencies', '')
+  .option('-id, --id <packageId>', 'Specifies a custom package ID to be installed. Defaults to the package identifier from the `package.json` file')
+  .option('-o, --override', 'Whether to override the existing package if it already exists. Defaults to false')
+  .option('-dep, --install-dependencies', 'Whether to install dependencies of the package. Defaults to false')
   .action(async (src, opts) => {
     const fpi = createFpi();
     await fpi.installLocalPackage(src, {packageId: opts.id, override: opts.override, installDependencies: opts.installDependencies});
