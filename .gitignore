@@ -3,3 +3,4 @@ cli
 node_modules
 test/.test-cache
 test/downloaded-packages
+package-lock.json
