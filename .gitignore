@@ -4,4 +4,3 @@ node_modules
 test/.dual-mode-cache
 test/.test-cache
 test/downloaded-packages
-package-lock.json
