@@ -267,6 +267,20 @@ describe('fhir-package-installer module', () => {
       const action = fpi.downloadPackage(testPkg, { destination: customPath, extract: true, overwrite: true });
       await expect(action).resolves.toBeDefined();
     });
+
+    it.each([
+      'hl7.fhir.us.core@6.1.0',
+      'hl7.fhir.us.davinci-pdex@2.0.0',
+      'hl7.fhir.us.davinci-pas@2.0.1',
+      'de.gematik.epa.medication@1.0.2-rc1'
+    ])('should install package: %s', 
+      { timeout: TIMEOUT, skip }, 
+      async (pkg) => {
+        const result = await customCacheFpi.install(pkg);
+        expect(result).toBe(true);
+        expect(await customCacheFpi.isInstalled(pkg)).toBe(true);
+      }
+    );
   }); // end of downloadPackage tests
 
   describe('install local package', () => {
@@ -344,19 +358,5 @@ describe('fhir-package-installer module', () => {
     });
 
     // end of install local package tests
-
-    it.each([
-      'hl7.fhir.us.core@6.1.0',
-      'hl7.fhir.us.davinci-pdex',
-      'hl7.fhir.us.davinci-pas@2.0.1',
-      'de.gematik.epa.medication@1.0.2-rc1'
-    ])('should install package: %s', 
-      { timeout: TIMEOUT, skip }, 
-      async (pkg) => {
-        const result = await customCacheFpi.install(pkg);
-        expect(result).toBe(true);
-        expect(await customCacheFpi.isInstalled(pkg)).toBe(true);
-      }
-    );
   });
 });

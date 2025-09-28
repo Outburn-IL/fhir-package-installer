@@ -12,6 +12,7 @@ A utility module for downloading, indexing, caching, and managing [FHIR](https:/
 - Generate and retrieve a local index (`.fpi.index.json`) of all FHIR JSON files in the package
 - Fetch `package.json` manifest and dependencies
 - Recursively install required dependencies
+- Support for private registries including JFrog Artifactory, Nexus, and Azure DevOps
 - Customizable registry URL, logger, and cache location
 
 ---
@@ -50,6 +51,7 @@ const customFpi = new FhirPackageInstaller({
     error: msg => console.error('[ERROR]', msg)
   },
   registryUrl: 'https://packages.fhir.org',
+  registryToken: 'your-registry-token-here', // For private registries / artifactories
   cachePath: './my-fhir-cache'
 });
 
@@ -58,7 +60,8 @@ await customFpi.install('hl7.fhir.r4.core');
 
 ### `FpiConfig` fields:
 - `logger` – Optional. Custom logger implementing the `ILogger` interface.
-- `registryUrl` – Optional. Custom package registry base URL.
+- `registryUrl` – Optional. Custom package registry base URL (e.g., JFrog Artifactory).
+- `registryToken` – Optional. Authentication token for private registries.
 - `cachePath` – Optional. Directory where packages will be cached.
 - `skipExamples` – Optional. Don't install dependencies that have `examples` in the package name
 
@@ -208,6 +211,50 @@ The package cache root folder contains a folder per package where the folder nam
   - `hl7.fhir.us.core#0.1.1`
   - `hl7.fhir.r4.core#4.0.1`
   - `hl7.fhir.uv.sdc#3.0.0`
+
+---
+
+## JFrog Artifactory & Private Registry Support
+
+FHIR Package Installer supports JFrog Artifactory and other private NPM registries that act as secure proxies or mirrors of the public FHIR Package Registry. Artifactory is commonly used by enterprises to provide cached, controlled access to FHIR packages through their internal infrastructure, along with other solutions like Nexus Repository and Azure DevOps Artifacts.
+
+### Artifactory Configuration
+
+```ts
+import { FhirPackageInstaller } from 'fhir-package-installer';
+
+const artifactoryFpi = new FhirPackageInstaller({
+  registryUrl: 'https://your-artifactory.example.com/artifactory/api/npm/fhir-npm-remote',
+  registryToken: 'cmVmdGtuOjAxOjE3ODQ5Nzc0OTI6NU83WE9JTkFrOVJtVWxxSmpzcXZsYWVaeHpL', // Do not include 'Bearer' prefix
+  cachePath: './custom-cache'
+});
+
+// Install public FHIR packages through your Artifactory registry
+await artifactoryFpi.install('hl7.fhir.r4.core@4.0.1');
+await artifactoryFpi.install('hl7.fhir.us.core@6.1.0');
+```
+
+### JFrog Artifactory Setup Requirements
+
+⚠️ **Critical Configuration**: When setting up your JFrog Artifactory repository for FHIR packages, you must:
+
+1. **Repository Type**: Create an **npm** remote repository (not generic)
+2. **Remote URL**: Set to `https://packages.simplifier.net`
+   - ⚠️ Use Simplifier URL, not `packages.fhir.org` (which is just an alias)
+   - The actual package metadata and tarball URLs always reference Simplifier
+3. in **Advanced Settings**: ✅ **Check "Bypass HEAD Request"** option
+   - This is essential because the FHIR Package Registry doesn't fully comply with npm protocol expectations
+   - Without this setting, package installation will fail
+
+**Why this matters**: The FHIR Package Registry behaves differently from standard npm registries. The "Bypass HEAD Request" option tells Artifactory to skip certain npm protocol checks that would otherwise cause failures when proxying FHIR packages.
+
+### Supported Private Registry Solutions
+
+- **JFrog Artifactory**: npm remote repositories (most common enterprise solution)
+- **Sonatype Nexus**: npm proxy repositories  
+- **Azure DevOps Artifacts**: npm feeds
+- **GitHub Packages**: npm package registry
+- **Custom npm registries**: Any npm-compatible registry with Bearer token authentication
 
 ---
 

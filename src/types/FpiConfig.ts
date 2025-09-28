@@ -11,7 +11,9 @@ import { ILogger } from './Logger';
 export interface FpiConfig {
     logger?: ILogger
     registryUrl?: string
+    registryToken?: string
     cachePath?: string
     skipExamples?: boolean // skip dependency installation of example packages
+    allowHttp?: boolean // allow HTTP URLs for testing (default: false)
   }
   
