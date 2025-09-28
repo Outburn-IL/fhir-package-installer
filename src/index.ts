@@ -4,7 +4,7 @@
  *   Project name: FHIR-Package-Installer
  */
 
-import http from 'http';
+import https from 'https';
 import fs from 'fs-extra';
 import pLimit from 'p-limit';
 import path from 'path';
@@ -49,8 +49,8 @@ export class FhirPackageInstaller {
   private logger: ILogger = defaultLogger;
   private utils: ReturnType<typeof createUtils>;
   private registryUrl = 'https://packages.fhir.org';
-  private registryToken?: string; // optional token for private registries
   private fallbackUrlBase = 'https://packages.simplifier.net';
+  private registryToken?: string; // optional token for private registries
   /**
    * Path to the FHIR package cache directory.
    * This directory is used to store downloaded and extracted FHIR packages.
@@ -78,7 +78,7 @@ export class FhirPackageInstaller {
     if (logger) {
       this.logger = logger;
     };
-    this.utils = createUtils(this.logger);
+    this.utils = createUtils(this.logger, this.getHttpOptions(this.registryUrl), this.allowHttp);
     this.prethrow = logger ? this.utils.prethrowWithLogger : this.utils.defaultPrethrow;
     if (skipExamples) {
       this.skipExamples = skipExamples;
@@ -145,8 +145,6 @@ export class FhirPackageInstaller {
       return indexJson;
     } catch (e) {
       throw this.prethrow(e);
-      this.logger.error(e);
-      throw e;
     }
   }
 
@@ -172,125 +170,6 @@ export class FhirPackageInstaller {
     }
     
     return options;
-  }
-
-  private fetchJson(url: string, redirectCount = 0): Promise<any> {
-    const maxRedirects = 5;
-    
-    return this.withRetries(() => new Promise((resolve, reject) => {
-      const options = this.getHttpOptions(url);
-      const isHttps = url.startsWith('https:');
-      const isHttp = url.startsWith('http:');
-      
-      // Check if HTTP is allowed for testing
-      if (isHttp && !this.allowHttp) {
-        reject(new Error('HTTP URLs not allowed. Use HTTPS or enable allowHttp for testing.'));
-        return;
-      }
-      
-      const client = isHttps ? https : http;
-      client.get(url, options, (res) => {
-        // Handle redirects (301, 302, 303, 307, 308)
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          if (redirectCount >= maxRedirects) {
-            reject(new Error(`Too many redirects (${maxRedirects}) when fetching ${url}`));
-            return;
-          }
-          
-          const redirectTarget = res.headers.location;
-          const displayUrl = redirectTarget.length > 64 
-            ? `${redirectTarget.substring(0, 64)}...` 
-            : redirectTarget;
-          this.logger.info(`Following redirect from ${url} to ${displayUrl}`);
-          // Recursively follow the redirect
-          this.fetchJson(res.headers.location, redirectCount + 1)
-            .then(resolve)
-            .catch(reject);
-          return;
-        }
-        
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => {
-          // Check for HTTP error status codes
-          if (res.statusCode && res.statusCode >= 400) {
-            try {
-              const errorData = JSON.parse(data);
-              const errorMsg = errorData.error || errorData.message || data;
-              
-              // Convert authentication/authorization errors to "not found" for consistency
-              if (res.statusCode === 403 || res.statusCode === 401) {
-                reject(new Error('Package not found in the registry (authentication failed)'));
-              } else {
-                reject(new Error(`HTTP ${res.statusCode}: ${errorMsg}`));
-              }
-            } catch {
-              if (res.statusCode === 403 || res.statusCode === 401) {
-                reject(new Error('Package not found in the registry (authentication failed)'));
-              } else {
-                reject(new Error(`HTTP ${res.statusCode}: ${data || 'Unknown error'}`));
-              }
-            }
-            return;
-          }
-          
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(new Error(`Failed to parse JSON from ${url}: ${e}`));
-          }
-        });
-      }).on('error', reject);
-    }));
-  }  
-
-  private fetchStream(url: string, redirectCount = 0): Promise<Readable> {
-    const maxRedirects = 5;
-    
-    try {
-      return this.withRetries(() => new Promise((resolve, reject) => {
-        const options = this.getHttpOptions(url);
-        const isHttps = url.startsWith('https:');
-        const isHttp = url.startsWith('http:');
-        
-        // Check if HTTP is allowed for testing
-        if (isHttp && !this.allowHttp) {
-          reject(new Error('HTTP URLs not allowed. Use HTTPS or enable allowHttp for testing.'));
-          return;
-        }
-        
-        const client = isHttps ? https : http;
-        client.get(url, options, (res) => {
-          // Handle redirects (301, 302, 303, 307, 308)
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            if (redirectCount >= maxRedirects) {
-              reject(new Error(`Too many redirects (${maxRedirects}) when fetching ${url}`));
-              return;
-            }
-            
-            const redirectTarget = res.headers.location;
-            const displayUrl = redirectTarget.length > 64 
-              ? `${redirectTarget.substring(0, 64)}...` 
-              : redirectTarget;
-            this.logger.info(`Following redirect from ${url} to ${displayUrl}`);
-            // Recursively follow the redirect
-            this.fetchStream(res.headers.location, redirectCount + 1)
-              .then(resolve)
-              .catch(reject);
-            return;
-          }
-          
-          if (res.statusCode === 200) {
-            resolve(res);
-          } else {
-            reject(new Error(`Failed to fetch ${url} (status ${res.statusCode})`));
-          }
-        }).on('error', reject);
-      }));      
-    } catch (e) {
-      this.logger.error(`Failed to fetch stream from ${url}`);
-      throw e;
-    }
   }
   
   private async getPackageDataFromRegistry(packageName: string): Promise<Record<string, any>> {
