@@ -313,18 +313,19 @@ export class FhirPackageInstaller {
     if (!await fs.exists(path.join(src, 'package'))) {
       finalPath = path.join(finalPath, 'package');
     }
-    const isInstalled = await this.isInstalled(packageObject);
-    if (!isInstalled) {
-      // try to move the temp dir to the cache, this will fail if pkg was already installed by a parallel process
-      try {
-        const action = move ? fs.move : fs.copy;
-        await action(src, finalPath, { overwrite: false });
-        this.logger.info(`Installed ${packageObject.id}@${packageObject.version} in the FHIR package cache: ${finalPath}`);
-      }
-      catch {
+    // attempt to install the package directly to avoid race condition
+    try {
+      const action = move ? fs.move : fs.copy;
+      await action(src, finalPath, { overwrite: false });
+      this.logger.info(`Installed ${packageObject.id}@${packageObject.version} in the FHIR package cache: ${finalPath}`);
+    } catch (error: any) {
+      // check if the package was installed by another process
+      if (await this.isInstalled(packageObject)) {
         this.logger.warn(`Package ${packageObject.id}@${packageObject.version} already installed by another process`);
         return finalPath;
       }
+      // re-throw if it's a different error
+      throw this.prethrow(error);
     }
     return finalPath;
   }

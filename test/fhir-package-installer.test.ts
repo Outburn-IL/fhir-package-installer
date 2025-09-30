@@ -359,4 +359,48 @@ describe('fhir-package-installer module', () => {
 
     // end of install local package tests
   });
+
+  describe('race condition handling', () => {
+    it('should handle concurrent package installation attempts gracefully', async () => {
+      const testPackage = { id: 'hl7.fhir.uv.sdc', version: '3.0.0' };
+      const tempCachePath = path.join(path.resolve('.'), 'test', '.race-test-cache');
+
+      // Clean up any existing installation
+      await fs.remove(tempCachePath);
+
+      // Create multiple FPI instances with the same cache path to simulate concurrent processes
+      const fpi1 = new FhirPackageInstaller({ cachePath: tempCachePath, logger: noopLogger });
+      const fpi2 = new FhirPackageInstaller({ cachePath: tempCachePath, logger: noopLogger });
+      const fpi3 = new FhirPackageInstaller({ cachePath: tempCachePath, logger: noopLogger });
+
+      // Verify package is not installed initially
+      expect(await fpi1.isInstalled(testPackage)).toBe(false);
+
+      // Start multiple concurrent installation attempts
+      const installPromises = [
+        fpi1.install(testPackage),
+        fpi2.install(testPackage),
+        fpi3.install(testPackage)
+      ];
+
+      // Wait for all installations to complete
+      const results = await Promise.all(installPromises);
+
+      // At least one should succeed (return true), others may return false if they detect the package is already installed
+      expect(results.some(result => result === true)).toBe(true);
+
+      // Verify package is installed after concurrent attempts
+      expect(await fpi1.isInstalled(testPackage)).toBe(true);
+      expect(await fpi2.isInstalled(testPackage)).toBe(true);
+      expect(await fpi3.isInstalled(testPackage)).toBe(true);
+
+      // Verify package is properly installed and accessible
+      const manifest = await fpi1.getManifest(testPackage);
+      expect(manifest.name).toBe(testPackage.id);
+      expect(manifest.version).toBe(testPackage.version);
+
+      // Clean up
+      await fs.remove(tempCachePath);
+    }, TIMEOUT);
+  });
 });
