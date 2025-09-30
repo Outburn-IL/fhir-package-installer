@@ -3,7 +3,7 @@
 import fs from 'fs-extra';
 import http from 'http';
 import https from 'https';
-import { ILogger } from '../types';
+import { AuthenticationError, ILogger } from '../types';
 import { Readable } from 'stream';
 import { finished } from 'stream/promises';
 
@@ -37,7 +37,11 @@ export function createHttpUtils(logger: ILogger, httpOptions: https.RequestOptio
     throw lastError;
   };
 
-  async function fetchJson(url: string, redirectCount = 0): Promise<any> {
+  async function makeHttpRequest<T>(
+    url: string,
+    responseHandler: (res: http.IncomingMessage, url: string) => Promise<T> | T,
+    redirectCount = 0
+  ): Promise<T> {
     return withRetries(() => new Promise((resolve, reject) => {
       const isHttps = isHttpsUrl(url);
       const isHttp = isHttpUrl(url);
@@ -49,26 +53,45 @@ export function createHttpUtils(logger: ILogger, httpOptions: https.RequestOptio
       }
 
       const client = isHttps ? https : http;
-      client.get(url, httpOptions, (res) => {
-        // Handle redirects (301, 302, 303, 307, 308)
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          if (redirectCount >= MAX_REDIRECTS) {
-            reject(new Error(`Too many redirects (${MAX_REDIRECTS}) when fetching ${url}`));
+      client.get(url, httpOptions, async (res) => {
+        try {
+          // Handle redirects (301, 302, 303, 307, 308)
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            if (redirectCount >= MAX_REDIRECTS) {
+              reject(new Error(`Too many redirects (${MAX_REDIRECTS}) when fetching ${url}`));
+              return;
+            }
+
+            const redirectTarget = res.headers.location;
+            const displayUrl = redirectTarget.length > 64
+              ? `${redirectTarget.substring(0, 64)}...`
+              : redirectTarget;
+            logger.info(`Following redirect from ${url} to ${displayUrl}`);
+            
+            // Recursively follow the redirect
+            const result = await makeHttpRequest(res.headers.location, responseHandler, redirectCount + 1);
+            resolve(result);
             return;
           }
 
-          const redirectTarget = res.headers.location;
-          const displayUrl = redirectTarget.length > 64
-            ? `${redirectTarget.substring(0, 64)}...`
-            : redirectTarget;
-          logger.info(`Following redirect from ${url} to ${displayUrl}`);
-          // Recursively follow the redirect
-          fetchJson(res.headers.location, redirectCount + 1)
-            .then(resolve)
-            .catch(reject);
-          return;
-        }
+          // Handle authentication/authorization errors consistently
+          if (res.statusCode === 403 || res.statusCode === 401) {
+            reject(new AuthenticationError('Authentication or authorization failed', res.statusCode));
+            return;
+          }
 
+          const result = await responseHandler(res, url);
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      }).on('error', reject);
+    }));
+  }
+
+  async function fetchJson(url: string, redirectCount = 0): Promise<any> {
+    return makeHttpRequest(url, (res, url) => {
+      return new Promise((resolve, reject) => {
         let data = '';
         res.on('data', (chunk) => (data += chunk));
         res.on('end', () => {
@@ -77,19 +100,9 @@ export function createHttpUtils(logger: ILogger, httpOptions: https.RequestOptio
             try {
               const errorData = JSON.parse(data);
               const errorMsg = errorData.error || errorData.message || data;
-
-              // Convert authentication/authorization errors to "not found" for consistency
-              if (res.statusCode === 403 || res.statusCode === 401) {
-                reject(new Error('Package not found in the registry (authentication failed)'));
-              } else {
-                reject(new Error(`HTTP ${res.statusCode}: ${errorMsg}`));
-              }
+              reject(new Error(`HTTP ${res.statusCode}: ${errorMsg}`));
             } catch {
-              if (res.statusCode === 403 || res.statusCode === 401) {
-                reject(new Error('Package not found in the registry (authentication failed)'));
-              } else {
-                reject(new Error(`HTTP ${res.statusCode}: ${data || 'Unknown error'}`));
-              }
+              reject(new Error(`HTTP ${res.statusCode}: ${data || 'Unknown error'}`));
             }
             return;
           }
@@ -100,49 +113,18 @@ export function createHttpUtils(logger: ILogger, httpOptions: https.RequestOptio
             reject(new Error(`Failed to parse JSON from ${url}: ${e}`));
           }
         });
-      }).on('error', reject);
-    }));
+      });
+    }, redirectCount);
   }
 
   async function fetchStream(url: string, redirectCount = 0): Promise<Readable> {
-    return withRetries(() => new Promise((resolve, reject) => {
-      const isHttps = isHttpsUrl(url);
-      const isHttp = isHttpUrl(url);
-
-      // Check if HTTP is allowed for testing
-      if (isHttp && !allowHttp) {
-        reject(new Error('HTTP URLs not allowed. Use HTTPS or enable allowHttp for testing.'));
-        return;
+    return makeHttpRequest(url, (res, url) => {
+      if (res.statusCode === 200) {
+        return res;
+      } else {
+        throw new Error(`Failed to fetch ${url} (status ${res.statusCode})`);
       }
-
-      const client = isHttps ? https : http;
-      client.get(url, httpOptions, (res) => {
-        // Handle redirects (301, 302, 303, 307, 308)
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          if (redirectCount >= MAX_REDIRECTS) {
-            reject(new Error(`Too many redirects (${MAX_REDIRECTS}) when fetching ${url}`));
-            return;
-          }
-
-          const redirectTarget = res.headers.location;
-          const displayUrl = redirectTarget.length > 64
-            ? `${redirectTarget.substring(0, 64)}...`
-            : redirectTarget;
-          logger.info(`Following redirect from ${url} to ${displayUrl}`);
-          // Recursively follow the redirect
-          fetchStream(res.headers.location, redirectCount + 1)
-            .then(resolve)
-            .catch(reject);
-          return;
-        }
-
-        if (res.statusCode === 200) {
-          resolve(res);
-        } else {
-          reject(new Error(`Failed to fetch ${url} (status ${res.statusCode})`));
-        }
-      }).on('error', reject);
-    }));
+    }, redirectCount);
   }
 
   async function downloadFile(url: string, destination: string): Promise<void> {
