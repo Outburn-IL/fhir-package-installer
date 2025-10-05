@@ -570,7 +570,7 @@ export class FhirPackageInstaller {
 
       const installedPath = await this.cachePackage(packageObject, finalPath, !isDirectory); // if the source is a file, we can move the temp dir to the cache
       await this.generatePackageIndex(packageObject);
-      this.logger.info(`Installed ${packageObject.id}@${packageObject.version} in the FHIR package cache: ${installedPath}`);
+      this.logger.info(`Generated .fpi.index.json for package ${packageObject.id}@${packageObject.version} at ${installedPath}`);
     
       if (options?.installDependencies) {
         await this.installPackageDependencies(packageObject);
