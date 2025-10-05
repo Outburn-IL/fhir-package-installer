@@ -12,7 +12,7 @@ const program = new Command()
 program
   .name('fpi')
   .description('CLI for installing and managing FHIR packages')
-  .version('0.0.1')
+  .version('1.0.0')
   .addHelpText('beforeAll', 'FHIR Package Installer\n© Copyright Outburn Ltd. 2022-2025 All Rights Reserved\n');
 
 // Commands
