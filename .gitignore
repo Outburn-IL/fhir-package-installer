@@ -3,4 +3,5 @@ cli
 node_modules
 test/.dual-mode-cache
 test/.test-cache
+test/.race-test-cache
 test/downloaded-packages
