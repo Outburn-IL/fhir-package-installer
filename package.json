@@ -35,7 +35,7 @@
   "scripts": {
     "clean:build": "rimraf dist && rimraf cli",
     "build:ncc": "ncc build src/index.ts --external fs-extra --external tar-stream --external temp --no-cache --out dist",
-    "build:cli": "ncc build src/cli.ts   --external fs-extra --external tar-stream --external temp --no-cache --out cli",
+    "build:cli": "ncc build src/cli.ts   --external fs-extra --external tar-stream --external temp --no-cache --out cli && node scripts/fix-shebang.js",
     "build": "npm run clean:build && npm run build:ncc && npm run build:cli",
     "cli": "npm run build && node cli/index.js",
     "cli:dev": "node cli/index.js",
@@ -47,7 +47,8 @@
     "test:dual-mode": "vitest run test/fhir-package-installer.dual-mode.test.ts",
     "test:mock-server": "vitest run test/mock-artifactory-server.test.ts",
     "test:skip-heavy": "cross-env SKIP_HEAVY_TESTS=true npm run test",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "npm:link": "npm run build && npm unlink -g fhir-package-installer && npm link"
   },
   "dependencies": {
     "commander": "^14.0.0",
