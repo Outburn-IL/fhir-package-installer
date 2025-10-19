@@ -129,7 +129,39 @@ program.parse();
 
 function createFpi() {
   const { registryUrl, cachePath, skipExamples } = program.opts();
-  return new FhirPackageInstaller({ registryUrl, cachePath, skipExamples });
+  const fpi = new FhirPackageInstaller({ registryUrl, cachePath, skipExamples });
+  
+  // Create a proxy that wraps all method calls with try-catch
+  return new Proxy(fpi, {
+    get(target, prop, receiver) {
+      const originalMethod = Reflect.get(target, prop, receiver);
+      
+      // Only wrap functions (methods)
+      if (typeof originalMethod === 'function') {
+        return function (...args: unknown[]) {
+          try {
+            const result = originalMethod.apply(target, args);
+            
+            // If the result is a Promise, wrap the promise with catch
+            if (result instanceof Promise) {
+              return result.catch((error: Error) => {
+                console.error(`Error in ${String(prop)}:`, error.message);
+                process.exit(1);
+              });
+            }
+            
+            return result;
+          } catch (error) {
+            console.error(`Error in ${String(prop)}:`, (error as Error).message);
+            process.exit(1);
+          }
+        };
+      }
+      
+      // Return non-function properties as-is
+      return originalMethod;
+    }
+  });
 };
 
 function print (data: unknown) {
