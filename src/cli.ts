@@ -22,7 +22,10 @@ program
   .description('Download and install a package and all its dependencies')
   .action(async (packageId) => {
     const fpi = createFpi();
-    await fpi.install(packageId);
+    const installed = await fpi.install(packageId);
+    if (installed) {
+      console.log(`Package ${packageId} installed successfully.`);
+    }
   });
 
 program
