@@ -49,7 +49,7 @@ describe('fhir-package-installer module', () => {
     // cleanup before running tests
     await fs.remove(customCachePath);
     await fs.remove(resolvedDownloadedPackagesPath);
-  });
+  }, 20000);
 
   it('should return correct fake package directory path (default cache)', async () => {
     const expectedPath = path.join(fpi.getCachePath(), 'fake-package#1.0.0');

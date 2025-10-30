@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { MockArtifactoryServer } from './mock-artifactory-server.js';
+import { createMockArtifactoryServer } from 'fhir-package-installer/mock-artifactory-server';
 import https from 'https';
 import http from 'http';
 
 describe('Mock Artifactory Server', () => {
-  let mockServer: MockArtifactoryServer;
+  let mockServer: ReturnType<typeof createMockArtifactoryServer>;
   const port = 3334;
 
   beforeAll(async () => {
-    mockServer = new MockArtifactoryServer(port);
+    mockServer = createMockArtifactoryServer(port);
     await mockServer.start();
   });
 

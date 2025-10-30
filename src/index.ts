@@ -650,5 +650,6 @@ export type {
   FileInPackageIndex,
   PackageResource,
   DownloadPackageOptions,
-  InstallPackageOptions
+  InstallPackageOptions,
+  FpiConfig
 } from './types';

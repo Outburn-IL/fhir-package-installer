@@ -37,6 +37,52 @@ const index = await fpi.getPackageIndexFile({ id: 'hl7.fhir.r4.core', version: '
 
 ---
 
+## Dual Module Usage (ESM & CommonJS)
+
+Starting with version 1.4.1, this package ships a dual build that supports both ESM and CommonJS consumers without the `ERR_REQUIRE_ESM` error.
+
+### ESM (Node >= 18 with "type": "module" or .mjs)
+
+```js
+import { FhirPackageInstaller } from 'fhir-package-installer';
+
+const fpiClassInstance = new FhirPackageInstaller();
+await fpiClassInstance.install('hl7.fhir.r4.core@4.0.1');
+```
+
+### CommonJS (legacy .cjs / no "type": "module")
+
+```js
+const { FhirPackageInstaller } = require('fhir-package-installer');
+
+const fpiClassInstance = new FhirPackageInstaller();
+fpiClassInstance.install('hl7.fhir.r4.core@4.0.1').then(() => console.log('Installed'));
+```
+
+### Default Instance Export
+
+For convenience, a default instance (`fpi`) is still exported:
+
+```js
+import fpi from 'fhir-package-installer'; // ESM
+// or
+const fpi = require('fhir-package-installer').default; // CJS
+```
+
+### TypeScript Consumers
+
+Type declarations resolve automatically via the `exports` map:
+
+```ts
+import { FhirPackageInstaller, PackageIdentifier } from 'fhir-package-installer';
+```
+
+No additional `types` configuration is required.
+
+---
+
+---
+
 ## Advanced Usage (Custom Configurations)
 
 Use the `FhirPackageInstaller` class directly to customize behavior:
