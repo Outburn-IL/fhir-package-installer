@@ -2,15 +2,17 @@ import fs from 'fs-extra';
 import path from 'path';
 
 const targetDir = path.resolve('node_modules', 'fhir-package-installer');
-const distSrc = path.resolve('dist');
-const distDest = path.join(targetDir, 'dist');
 const filesToCopy = ['README.md', 'LICENSE', 'package.json'];
 
 console.log(`Creating ${targetDir}...`);
 await fs.ensureDir(targetDir);
 
-console.log(`Copying assets from ${distSrc} to ${distDest}...`);
-await fs.copy(distSrc, distDest);
+['dist', 'cli'].forEach(async p => {
+  const distSrc = path.resolve(p);
+  const distDest = path.join(targetDir, p);
+  console.log(`Copying assets from ${distSrc} to ${distDest}...`);
+  await fs.copy(distSrc, distDest);
+});
 
 for (const file of filesToCopy) {
   const src = path.resolve(file);

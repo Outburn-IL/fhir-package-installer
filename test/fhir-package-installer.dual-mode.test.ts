@@ -74,7 +74,7 @@ describe('FHIR Package Installer - Dual Mode Tests (Direct + Artifactory)', () =
       const invalidFpi = new FhirPackageInstaller(invalidConfig);
 
       await expect(invalidFpi.checkLatestPackageDist('hl7.fhir.uv.sdc'))
-        .rejects.toThrow(/Package not found/);
+        .rejects.toThrow(/Authentication or authorization failed/);
     }, TIMEOUT);
   });
 
