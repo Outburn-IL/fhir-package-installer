@@ -140,10 +140,13 @@ program
   .alias('is')
   .description('Determine whether the package is already present in the local cache or not')
   .option('--shallow', 'Only check whether the package itself is installed; skip dependency validation')
+  .option('--raw', 'Print the raw boolean result (true/false) instead of a friendly message')
   .action(async (packageId, opts) => {
-    const fpi = createFpi();
+    const fpi = createFpi({ disableLogging: true });
     const isInstalled = await fpi.isInstalled(packageId, { deep: !opts.shallow });
-    if (isInstalled) {
+    if (opts.raw) {
+      print(isInstalled);
+    } else if (isInstalled) {
       print(`Package ${packageId} is already installed.`);
     } else {
       print(`Package ${packageId} is not installed.`);
@@ -192,7 +195,15 @@ function createConsoleLogger(verbose: boolean): Logger {
   return logger;
 }
 
-function createFpi() {
+function createSilentLogger(): Logger {
+  return {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  };
+}
+
+function createFpi(options?: { disableLogging?: boolean }): FhirPackageInstaller {
   const {
     registryUrl,
     registryToken,
@@ -206,7 +217,7 @@ function createFpi() {
   } = program.opts();
 
   const config: FpiConfig = {
-    logger: createConsoleLogger(Boolean(verbose)),
+    logger: options?.disableLogging ? createSilentLogger() : createConsoleLogger(Boolean(verbose)),
     registryUrl,
     registryToken,
     cachePath,

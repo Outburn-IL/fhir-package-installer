@@ -900,6 +900,31 @@ describe('fhir-package-installer module', () => {
       await expect(action).resolves.toBeDefined();
     });
 
+    it('logs tarball download path separately from extracted folder path', { timeout: TIMEOUT }, async () => {
+      const info = vi.fn();
+      const logger: Logger = {
+        info,
+        warn: () => {},
+        error: () => {},
+      };
+      const loggingFpi = new FhirPackageInstaller({
+        allowHttp: true,
+        registryUrl: registry.getBaseUrl(),
+        logger,
+      });
+      const logDestination = path.join(downloadedPackagesPath, 'log-paths');
+      const resolvedLogDestination = path.resolve(logDestination);
+      const expectedDownloadPath = path.join(resolvedLogDestination, `${testPkg.id}-${testPkg.version}.tgz`);
+      const expectedExtractedPath = path.join(resolvedLogDestination, `${testPkg.id}#${testPkg.version}`);
+
+      const downloadedPath = await loggingFpi.downloadPackage(testPkg, { destination: logDestination, extract: true, overwrite: true });
+
+      expect(downloadedPath).toBe(expectedExtractedPath);
+      expect(info).toHaveBeenCalledWith(`Downloading ${testPkg.id}@${testPkg.version} to: ${expectedDownloadPath}`);
+      expect(info).toHaveBeenCalledWith(`Downloaded ${testPkg.id}@${testPkg.version} to: ${expectedDownloadPath}`);
+      expect(info).toHaveBeenCalledWith(`Extracted ${testPkg.id}@${testPkg.version} to: ${expectedExtractedPath}`);
+    });
+
     it.each([
       `${testPkg.id}@${testPkg.version}`,
       `${rootPkg.id}#${rootPkg.version}`

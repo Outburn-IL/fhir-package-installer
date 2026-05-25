@@ -3566,16 +3566,16 @@ export class FhirPackageInstaller {
 
     const packageObject = await this.toPackageObject(packageId);
     const packageName = `${packageObject.id}@${packageObject.version}`;
-    
-    let finalPath = destination && path.isAbsolute(destination)
+
+    const resolvedDestination = destination && path.isAbsolute(destination)
       ? destination
       : path.join(path.resolve(destination ||'.'));
+    const downloadPath = path.join(resolvedDestination, `${packageObject.id}-${packageObject.version}.tgz`);
+    let finalPath = downloadPath;
     if (extract) {
-      finalPath = path.join(finalPath, await this.toDirName(packageObject));
-    } else {
-      finalPath = path.join(finalPath, `${packageObject.id}-${packageObject.version}.tgz`);
+      finalPath = path.join(resolvedDestination, await this.toDirName(packageObject));
     }
-    this.logger.info(`Downloading ${(extract ? 'and extracting ' : '')}${packageName} to: ${finalPath}`);
+    this.logger.info(`Downloading ${packageName} to: ${downloadPath}`);
 
     if (extract) {
       const tempDirectory = await this.downloadAndExtractTarball(packageObject);
@@ -3584,7 +3584,10 @@ export class FhirPackageInstaller {
       const tempDirectory = await this.downloadTarball(packageObject);
       await fs.move(tempDirectory, finalPath, { overwrite });
     }
-    this.logger.info(`Downloaded ${packageName} to: ${finalPath}`);
+    this.logger.info(`Downloaded ${packageName} to: ${downloadPath}`);
+    if (extract) {
+      this.logger.info(`Extracted ${packageName} to: ${finalPath}`);
+    }
     return finalPath;
   }
 }
