@@ -10,7 +10,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'ut
 const version = pkg?.version ?? '0.0.0';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/mock-artifactory-server.ts'],
+  entry: ['src/index.ts', 'src/mock-artifactory-server.ts', 'src/cli.ts'],
   dts: true,
   format: ['cjs', 'esm'],
   outDir: 'dist',
@@ -28,5 +28,15 @@ export default defineConfig({
   outExtension({ format }) {
     if (format === 'esm') return { js: '.mjs' };
     return { js: '.cjs' };
+  },
+  async onSuccess() {
+    const cliCjs = path.join(__dirname, 'dist', 'cli.cjs');
+    if (fs.existsSync(cliCjs)) {
+      const content = fs.readFileSync(cliCjs, 'utf8');
+      if (content.startsWith('#!') && !content.startsWith('#!/usr/bin/env node\r\n')) {
+        const patched = content.replace(/^(#![^\n]*)\r?\n/, '$1\r\n');
+        fs.writeFileSync(cliCjs, patched);
+      }
+    }
   }
 });

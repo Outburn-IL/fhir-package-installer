@@ -334,6 +334,66 @@ Sample structure:
 
 ---
 
+## CLI
+
+In addition to its programmatic API, FHIR Package Installer also provides a fully featured Command Line Interface (CLI) for installing, managing, and inspecting FHIR packages directly from the terminal.
+
+This is especially useful for:
+- Tooling pipelines (e.g., CI/CD)
+- Scripted validators and snapshot generators
+- Developers who prefer using the CLI over importing the library
+
+### Usage
+
+```
+fpi [options] [command]
+```
+
+### Global Options
+
+| Option                            | Description                                                                       |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| `-r`, `--registry-url <url>`      | URL of the FHIR package registry (use `n/a` to disable network access)            |
+| `-t`, `--registry-token <token>`  | Bearer token for authenticating against a private registry                        |
+| `-c`, `--cache-path <path>`       | Path to the FHIR package cache directory                                          |
+| `-s`, `--skip-examples`           | Skip dependency installation of example packages                                  |
+| `--allow-http`                    | Allow HTTP (non-HTTPS) registry URLs (for testing)                                |
+| `--request-timeout <ms>`          | HTTP request timeout in milliseconds (default: 90000)                             |
+| `--extract-timeout <ms>`          | Tarball extraction timeout in milliseconds (default: 60000)                       |
+| `--registry-ttl <ms>`             | TTL for cached registry lookups in milliseconds (default: 1800000 = 30 minutes)   |
+| `-v`, `--verbose`                 | Enable verbose (debug) logging                                                    |
+| `-V`, `--version`                 | Output the version number                                                         |
+| `-h`, `--help`                    | Display help for command                                                          |
+
+### Commands
+
+| Command                              | Description                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| `install`, `i <packageId>`           | Download and install a package and all its dependencies                        |
+| `download`, `dl <packageId>`         | Download a package tarball and optionally extract it to a destination          |
+| `install-local`, `il <src>`          | Install a package from a local file or directory                               |
+| `get-manifest`, `gm <packageId>`     | Print the `package.json` manifest of an installed package                      |
+| `get-index`, `gi <packageId>`        | Print the `.fpi.index.json` content for the package. Auto-generates if missing |
+| `get-dependencies`, `gd <packageId>` | Parse and list dependencies (explicit + implicit) of a package                 |
+| `to-package-object`, `tpo <id>`      | Parse `name`, `name@version`, or `name#version` into `{ id, version }`         |
+| `check-latest`, `cl <packageName>`   | Resolve the latest published version of a package from the registry            |
+| `is-installed`, `is <packageId>`     | Check if a package (and its dependencies) exist in the local cache             |
+| `get-cache`, `gc`                    | Print the root cache directory path                                            |
+| `get-package-path`, `gp <id>`        | Print the path to a specific cached package                                    |
+| `help [command]`                     | Display help for a specific command                                            |
+
+Run `fpi <command> --help` to see all options available for a specific command.
+
+### Claude Code Skill
+
+This repository ships a [Claude Code](https://code.claude.com/docs) skill that teaches Claude how to drive the `fpi` CLI — command syntax, aliases, global flags, common workflows, and known gotchas (offline mode, identifier syntax, `--raw` for scripting, etc.).
+
+- **Location:** [`skills/fpi-cli/SKILL.md`](skills/fpi-cli/SKILL.md)
+- **What it does:** When you ask Claude to install, download, inspect, or check FHIR packages from the CLI (e.g. _"install hl7.fhir.r4.core@4.0.1 into ./cache"_, _"is hl7.fhir.uv.sdc cached?"_, _"what's the latest version of hl7.terminology.r4?"_), Claude will automatically invoke this skill and use the right `fpi` invocation instead of guessing.
+- **How to enable it:** Claude Code auto-discovers skills under `skills/` in the workspace. No installation step is required — just open this repo in Claude Code (or any Claude environment that supports project-local skills) and start asking package questions.
+
+---
+
 ## License
 MIT  
 © Outburn Ltd. 2022–2025. All Rights Reserved.

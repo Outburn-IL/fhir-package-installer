@@ -900,6 +900,31 @@ describe('fhir-package-installer module', () => {
       await expect(action).resolves.toBeDefined();
     });
 
+    it('logs tarball download path separately from extracted folder path', { timeout: TIMEOUT }, async () => {
+      const info = vi.fn();
+      const logger: Logger = {
+        info,
+        warn: () => {},
+        error: () => {},
+      };
+      const loggingFpi = new FhirPackageInstaller({
+        allowHttp: true,
+        registryUrl: registry.getBaseUrl(),
+        logger,
+      });
+      const logDestination = path.join(downloadedPackagesPath, 'log-paths');
+      const resolvedLogDestination = path.resolve(logDestination);
+      const expectedDownloadPath = path.join(resolvedLogDestination, `${testPkg.id}-${testPkg.version}.tgz`);
+      const expectedExtractedPath = path.join(resolvedLogDestination, `${testPkg.id}#${testPkg.version}`);
+
+      const downloadedPath = await loggingFpi.downloadPackage(testPkg, { destination: logDestination, extract: true, overwrite: true });
+
+      expect(downloadedPath).toBe(expectedExtractedPath);
+      expect(info).toHaveBeenCalledWith(`Downloading ${testPkg.id}@${testPkg.version} to: ${expectedDownloadPath}`);
+      expect(info).toHaveBeenCalledWith(`Downloaded ${testPkg.id}@${testPkg.version} to: ${expectedDownloadPath}`);
+      expect(info).toHaveBeenCalledWith(`Extracted ${testPkg.id}@${testPkg.version} to: ${expectedExtractedPath}`);
+    });
+
     it.each([
       `${testPkg.id}@${testPkg.version}`,
       `${rootPkg.id}#${rootPkg.version}`
@@ -985,6 +1010,76 @@ describe('fhir-package-installer module', () => {
       await expect(customCacheFpi.installLocalPackage(testPkgSrcPath, { installDependencies: false })).resolves.toBe(true);
       await expect(customCacheFpi.isInstalled(testPkg)).resolves.toBe(true);
       await expect(fs.exists(indexPath)).resolves.toBe(true);
+    });
+
+    it('writes a dummy manifest when the source has no package.json', { timeout: TIMEOUT }, async () => {
+      const dummyPkg = { id: 'dummy.no.manifest', version: '1.2.3' };
+      const dummySrcRoot = createTempDir();
+      const dummyPackageDir = path.join(dummySrcRoot, 'package');
+      await fs.ensureDir(dummyPackageDir);
+      // Put a resource file but no package.json
+      await fs.writeFile(
+        path.join(dummyPackageDir, 'StructureDefinition-foo.json'),
+        JSON.stringify({ resourceType: 'StructureDefinition', id: 'foo' }),
+      );
+
+      await expect(
+        customCacheFpi.installLocalPackage(dummySrcRoot, { packageId: `${dummyPkg.id}@${dummyPkg.version}`, installDependencies: false }),
+      ).resolves.toBe(true);
+
+      const cachedManifestPath = path.join(await customCacheFpi.getPackageDirPath(dummyPkg), 'package', 'package.json');
+      const written = await fs.readJSON(cachedManifestPath) as { name: string; version: string; fhirVersions?: string[] };
+      expect(written.name).toBe(dummyPkg.id);
+      expect(written.version).toBe(dummyPkg.version);
+      expect(written.fhirVersions).toEqual(['4.0.1']);
+
+      await fs.remove(dummySrcRoot);
+    });
+
+    it('rewrites the manifest and warns when a custom packageId does not match the source manifest', { timeout: TIMEOUT }, async () => {
+      const renamedPkg = { id: 'renamed.pkg', version: '9.9.9' };
+      const warn = vi.fn();
+      const reconcilingFpi = new FhirPackageInstaller({
+        cachePath: customCachePath,
+        allowHttp: true,
+        registryUrl: registry.getBaseUrl(),
+        logger: { info: () => {}, warn, error: () => {} },
+      });
+
+      await expect(
+        reconcilingFpi.installLocalPackage(fshGeneratedPath, { packageId: `${renamedPkg.id}@${renamedPkg.version}`, installDependencies: false }),
+      ).resolves.toBe(true);
+
+      const cachedManifestPath = path.join(await reconcilingFpi.getPackageDirPath(renamedPkg), 'package', 'package.json');
+      const written = await fs.readJSON(cachedManifestPath) as { name: string; version: string; fhirVersions?: string[] };
+      expect(written.name).toBe(renamedPkg.id);
+      expect(written.version).toBe(renamedPkg.version);
+      // Other manifest fields from the original source should be preserved.
+      expect(written.fhirVersions).toEqual(['4.0.1']);
+
+      const mismatchWarnings = warn.mock.calls.filter(([msg]) => typeof msg === 'string' && msg.includes('does not match the manifest in the package'));
+      expect(mismatchWarnings.length).toBe(1);
+    });
+
+    it('does not warn when a custom packageId matches the source manifest', { timeout: TIMEOUT }, async () => {
+      const warn = vi.fn();
+      const matchingFpi = new FhirPackageInstaller({
+        cachePath: customCachePath,
+        allowHttp: true,
+        registryUrl: registry.getBaseUrl(),
+        logger: { info: () => {}, warn, error: () => {} },
+      });
+
+      await expect(
+        matchingFpi.installLocalPackage(fshGeneratedPath, {
+          packageId: `${fshGeneratedPkg.id}@${fshGeneratedPkg.version}`,
+          override: true,
+          installDependencies: false,
+        }),
+      ).resolves.toBe(true);
+
+      const mismatchWarnings = warn.mock.calls.filter(([msg]) => typeof msg === 'string' && msg.includes('does not match the manifest in the package'));
+      expect(mismatchWarnings.length).toBe(0);
     });
 
     // end of install local package tests
