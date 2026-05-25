@@ -6,6 +6,9 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "type": "module",
+  "bin": {
+    "fpi": "./dist/cli.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -58,9 +61,12 @@
     "test:light": "cross-env FPI_SKIP_LIVE_REGISTRY=1 FPI_SKIP_VSAC_STRESS=1 FPI_SKIP_SYNTH_STRESS=1 vitest run",
     "test:dual-mode": "vitest run test/fhir-package-installer.dual-mode.test.ts",
     "test:mock-server": "vitest run test/mock-artifactory-server.test.ts",
+    "npm:link": "npm run build && npm unlink -g fhir-package-installer && npm link",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
+    "commander": "^14.0.3",
     "fs-extra": "^11.3.5",
     "p-limit": "^7.3.0",
     "semver": "^7.8.0",
