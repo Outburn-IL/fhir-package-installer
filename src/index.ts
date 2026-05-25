@@ -3535,7 +3535,42 @@ export class FhirPackageInstaller {
 
       await fs.remove(await this.getPackageDirPath(packageObject));
 
-      await this.cachePackage(packageObject, finalPath, !isDirectory); // if the source is a file, we can move the temp dir to the cache
+      const cachedPackagePath = await this.cachePackage(packageObject, finalPath, !isDirectory); // if the source is a file, we can move the temp dir to the cache
+      const packageDir = path.join(cachedPackagePath, 'package');
+      const manifestPath = path.join(packageDir, 'package.json');
+
+      // generate a dummy manifest file in the cached directory if it doesn't exist
+      const packageStatus = await this.getPackageMaterializationStatus(packageObject);
+      const shouldGenerateDummyManifest = !packageStatus.complete && (
+        packageStatus.reason === 'manifest-missing' ||
+        packageStatus.reason === 'manifest-invalid'
+      );
+      if (shouldGenerateDummyManifest) {
+        const dummyManifest: PackageManifest = {
+          name: packageObject.id,
+          version: packageObject.version ?? '0.0.0',
+          fhirVersions: ['4.0.1'],
+        };
+        await fs.writeFile(manifestPath, JSON.stringify(dummyManifest, null, 2), 'utf8');
+        this.logger.debug?.(
+          `Generated dummy manifest for ${this.formatPackageForDebug(packageObject)} at ${manifestPath}.`
+        );
+      }
+
+      // if custom packageId was provided, we should verify that the manifest info matches the expected package id
+      if (options?.packageId) {
+        const manifest = await this.getManifest(packageObject);
+        const match = manifest.name === packageObject.id && manifest.version === packageObject.version;
+        if (!match) {
+          manifest.name = packageObject.id;
+          manifest.version = packageObject.version ?? manifest.version;
+          await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+          this.logger.warn(
+            `The provided packageId (${packageObject.id}@${packageObject.version}) does not match the manifest in the package. ` +
+            `Updated manifest to match the provided packageId.`
+          );
+        }
+      }
 
       if (options?.installDependencies) {
         await this.installPackageDependencies(packageObject);
