@@ -3,3 +3,4 @@ node_modules
 test/.dual-mode*
 test/downloaded-packages
 test/.*cache*
+cli-test-results.md

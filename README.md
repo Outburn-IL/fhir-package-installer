@@ -384,6 +384,14 @@ fpi [options] [command]
 
 Run `fpi <command> --help` to see all options available for a specific command.
 
+### Claude Code Skill
+
+This repository ships a [Claude Code](https://code.claude.com/docs) skill that teaches Claude how to drive the `fpi` CLI — command syntax, aliases, global flags, common workflows, and known gotchas (offline mode, identifier syntax, `--raw` for scripting, etc.).
+
+- **Location:** [`skills/fpi-cli/SKILL.md`](skills/fpi-cli/SKILL.md)
+- **What it does:** When you ask Claude to install, download, inspect, or check FHIR packages from the CLI (e.g. _"install hl7.fhir.r4.core@4.0.1 into ./cache"_, _"is hl7.fhir.uv.sdc cached?"_, _"what's the latest version of hl7.terminology.r4?"_), Claude will automatically invoke this skill and use the right `fpi` invocation instead of guessing.
+- **How to enable it:** Claude Code auto-discovers skills under `skills/` in the workspace. No installation step is required — just open this repo in Claude Code (or any Claude environment that supports project-local skills) and start asking package questions.
+
 ---
 
 ## License
